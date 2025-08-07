@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Countdown Timer with YouTube Audio</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #000;
+            color: #FF6600;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        body.fullscreen {
+            background-color: #000;
+        }
+
+        #display {
+            font-size: 20vw;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 102, 0, 0.2);
+            margin-bottom: 20px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            transition: opacity 0.3s;
+        }
+
+        body.fullscreen .controls {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: rgba(255, 102, 0, 0.3);
+            color: #FF6600;
+            border: 1px solid #0400ff;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: rgba(255, 102, 0, 0.5);
+        }
+
+        #music-controls {
+            position: fixed;
+            bottom: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: opacity 0.3s;
+        }
+
+        body.fullscreen #music-controls {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #youtubeUrl {
+            padding: 8px;
+            width: 300px;
+            margin-bottom: 10px;
+            background: #222;
+            color: white;
+            border: 1px solid #FF6600;
+            border-radius: 3px;
+        }
+
+        #fullscreen-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+
+        #volume-control {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #volume-slider {
+            width: 100px;
+        }
+
+        #youtube-frame {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border: none;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="display">30:00</div>
+    
+    <div class="controls">
+        <button id="startBtn">Start</button>
+        <button id="resetBtn">Reset</button>
+        <button id="editBtn">Edit</button>
+    </div>
+
+    <div id="music-controls">
+        <input type="text" id="youtubeUrl" placeholder="Paste YouTube URL (e.g., https://youtu.be/dQw4w9WgXcQ)">
+        <button id="loadMusic">Load Music</button>
+    </div>
+
+    <button id="fullscreen-btn">Fullscreen</button>
+
+    <div id="volume-control">
+        <span>🔊</span>
+        <input type="range" id="volume-slider" min="0" max="100" value="50">
+    </div>
+
+    <!-- YouTube iframe will be added here -->
+    <div id="player-container"></div>
+
+    <script>
+        let timer;
+        let totalSeconds = 30 * 60;
+        let isRunning = false;
+        let isFullscreen = false;
+        let currentVolume = 50;
+        let player;
+        let videoId = '';
+
+        const display = document.getElementById('display');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const editBtn = document.getElementById('editBtn');
+        const youtubeUrl = document.getElementById('youtubeUrl');
+        const loadMusic = document.getElementById('loadMusic');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const volumeSlider = document.getElementById('volume-slider');
+        const body = document.body;
+        const playerContainer = document.getElementById('player-container');
+
+        // Load YouTube API
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        // Timer functions
+        function updateDisplay() {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            display.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+            
+            isRunning = true;
+            startBtn.textContent = 'Pause';
+            
+            if (player) {
+                player.playVideo();
+                player.unMute();
+                player.setVolume(currentVolume);
+            }
+            
+            timer = setInterval(() => {
+                if (totalSeconds <= 0) {
+                    clearInterval(timer);
+                    isRunning = false;
+                    startBtn.textContent = 'Start';
+                    return;
+                }
+                
+                totalSeconds--;
+                updateDisplay();
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            clearInterval(timer);
+            isRunning = false;
+            startBtn.textContent = 'Start';
+            if (player) {
+                player.pauseVideo();
+            }
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            totalSeconds = 30 * 60;
+            updateDisplay();
+        }
+
+        function editTimer() {
+            const newTime = prompt("Enter minutes for timer:", (totalSeconds/60).toString());
+            if (newTime && !isNaN(newTime)) {
+                totalSeconds = parseInt(newTime) * 60;
+                updateDisplay();
+            }
+        }
+
+        function toggleFullscreen() {
+            isFullscreen = !isFullscreen;
+            body.classList.toggle('fullscreen', isFullscreen);
+            fullscreenBtn.textContent = isFullscreen ? 'Exit Fullscreen' : 'Fullscreen';
+        }
+
+        // YouTube Player API
+        function onYouTubeIframeAPIReady() {
+            // Player will be created when URL is loaded
+        }
+
+        function createPlayer() {
+            player = new YT.Player('player-container', {
+                height: '0',
+                width: '0',
+                videoId: videoId,
+                playerVars: {
+                    'autoplay': 0,
+                    'controls': 0,
+                    'disablekb': 1,
+                    'fs': 0,
+                    'loop': 1,
+                    'modestbranding': 1,
+                    'playsinline': 1,
+                    'rel': 0
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            // Player is ready
+            event.target.setVolume(currentVolume);
+        }
+
+        function onPlayerStateChange(event) {
+            // Handle player state changes if needed
+        }
+
+        // Extract YouTube video ID from URL
+        function extractVideoId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', () => {
+            if (isRunning) {
+                pauseTimer();
+            } else {
+                startTimer();
+            }
+        });
+
+        resetBtn.addEventListener('click', resetTimer);
+        editBtn.addEventListener('click', editTimer);
+
+        loadMusic.addEventListener('click', () => {
+            const url = youtubeUrl.value.trim();
+            if (url) {
+                const id = extractVideoId(url);
+                if (id) {
+                    videoId = id;
+                    if (player) {
+                        player.loadVideoById(videoId);
+                    } else {
+                        createPlayer();
+                    }
+                    alert("Music loaded! Click Start to play.");
+                } else {
+                    alert('Please enter a valid YouTube URL');
+                }
+            }
+        });
+
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+        volumeSlider.addEventListener('input', (e) => {
+            currentVolume = e.target.value;
+            if (player) {
+                player.setVolume(currentVolume);
+            }
+        });
+
+        // Double click timer for fullscreen
+        display.addEventListener('dblclick', toggleFullscreen);
+
+        // Initialize
+        updateDisplay();
+    </script>
+</body>
+</html>
